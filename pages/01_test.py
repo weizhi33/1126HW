@@ -36,7 +36,7 @@ def Page():
     
     # 修正錯誤的核心邏輯
     def add_data_layer(m):
-        """添加修正後的 GeoDataFrame 圖層。"""
+        """添加修正後的 GeoDataFrame 層。"""
         
         # ***** 錯誤修正 START *****
         # 修正方法：定義單一樣式字典，避免 Leafmap 誤判為需要主題繪圖 (Thematic Mapping) 的 'column' 參數。
