@@ -57,16 +57,14 @@ def Page():
         solara.Error(f"資料讀取錯誤: {e}")
         return
 
-    # --- 顯示區 ---
+# --- 顯示區 ---
     with solara.Column(style={"padding": "0 20px"}):
         solara.Markdown(f"### 🔍 查詢結果：共找到 {row_count} 筆資料")
         
         # 顯示地圖
-        # 使用標準 Leafmap 建立地圖
         m = leafmap.Map(center=[23.5, 121], zoom=4) 
         
         if not df.empty:
-            # 將資料加到地圖上
             m.add_circle_markers_from_xy(
                 df, 
                 x="longitude", 
@@ -77,8 +75,8 @@ def Page():
                 popup=["place", "mag", "time"] 
             )
         
-        # --- 修改這裡：使用 to_solara() 來渲染地圖 ---
-        m.to_solara() 
+        # 🔥 關鍵修改：用 .element() 讓 Solara 顯示地圖 🔥
+        m.element()
 
         # 顯示資料表 (表格)
         solara.Markdown("### 📋 詳細資料表")
