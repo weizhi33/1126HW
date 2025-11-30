@@ -1,16 +1,25 @@
-# 1. 使用 Leafmap 作者做好的官方映像檔 (裡面已經有最新版 leafmap 和地圖工具)
-FROM ghcr.io/opengeos/leafmap:latest
+# 使用 Mamba (Conda 的快速版)，這是 GIS 界的標準神器
+FROM mambaorg/micromamba:1.5.8
 
-# 2. 設定工作目錄
-WORKDIR /code
+# 設定工作目錄，並處理權限 (避免 jovyan 權限問題)
+COPY --chown=$MAMBA_USER:$MAMBA_USER . /tmp/app
+WORKDIR /tmp/app
 
-# 3. 雖然裡面有 leafmap，但我們還需要裝 solara 和 duckdb
-# (使用 root 權限安裝，避免權限錯誤)
-USER root
-RUN pip install solara duckdb pandas
+# ⚠️ 關鍵步驟：使用 conda-forge 安裝
+# 這會直接下載已經編譯好的 GDAL、Leafmap 和 Solara，保證相容性
+RUN micromamba install -y -n base -c conda-forge \
+    python=3.10 \
+    leafmap>=0.31.0 \
+    solara \
+    duckdb \
+    pandas \
+    geopandas \
+    pyarrow \
+    xyzservices \
+    && micromamba clean --all --yes
 
-# 4. 複製程式碼
-COPY . .
+# 啟動這個環境的魔法咒語
+ARG MAMBA_DOCKERFILE_ACTIVATE=1
 
-# 5. 啟動 Solara
+# 啟動 Solara
 CMD ["solara", "run", "app.py", "--host=0.0.0.0", "--port=7860"]
