@@ -2,62 +2,42 @@ import solara
 import duckdb
 import leafmap
 import pandas as pd
-import geopandas as gpd  # 引入地理資料處理神器
+from ipyleaflet import CircleMarker, Marker  # 引入最底層的繪圖元件
 
 # --- 1. 初始化 DuckDB ---
-# 使用 :memory: 模式，並載入必要的擴充套件
 con = duckdb.connect(database=':memory:')
 con.install_extension('spatial')
 con.load_extension('spatial')
-con.install_extension('httpfs')  # 讓我們可以讀取網路 CSV
+con.install_extension('httpfs')
 con.load_extension('httpfs')
 
-# --- 2. 設定資料來源 ---
-# 這裡用 USGS 地震資料做示範
-# 之後你可以把這個網址換成你 GitHub 上的馬太鞍溪 CSV 檔 (記得用 Raw 連結)
+# --- 2. 資料來源 ---
 csv_url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_month.csv"
 
-# --- 3. 建立互動變數 (Reactive State) ---
-# 這是讓網頁可以跟使用者互動的關鍵
-mag_slider = solara.reactive(4.5)  # 預設篩選規模 4.5 以上
+# --- 3. 互動變數 ---
+mag_slider = solara.reactive(5.0)  # 為了避免點太多，預設先設 5.0
 
 @solara.component
 def Page():
     
-    # --- 版面配置：標題 ---
     with solara.Column(style={"padding": "20px"}):
-        solara.Markdown("# 🌍 地理空間分析儀表板 (DuckDB + Leafmap + GeoPandas)")
-        solara.Markdown("結合 **DuckDB** 的極速運算與 **GeoPandas** 的標準化繪圖。")
+        solara.Markdown("# 🌍 地理空間分析儀表板 (暴力繪圖版)")
+        solara.Markdown("使用最底層的 **ipyleaflet** 迴圈繪圖，保證點點現形。")
 
-    # --- 版面配置：側邊欄 ---
     with solara.Sidebar():
         solara.Markdown("### 📊 篩選條件")
-        solara.SliderFloat(
-            label="最小地震規模 (Magnitude)", 
-            value=mag_slider, 
-            min=2.5, 
-            max=8.0, 
-            step=0.1
-        )
-        solara.Info("調整滑桿後，系統會透過 DuckDB 重新撈取資料。")
+        solara.SliderFloat(label="地震規模", value=mag_slider, min=2.5, max=8.0, step=0.1)
 
-    # --- 核心邏輯：資料查詢 ---
-    # 使用 f-string 動態組合 SQL 語句
+    # --- SQL 查詢 ---
+    # 限制只抓前 200 筆，避免手動畫圖太慢
     query = f"""
-        SELECT 
-            time, 
-            place, 
-            mag, 
-            depth, 
-            latitude, 
-            longitude
+        SELECT place, mag, time, latitude, longitude
         FROM read_csv_auto('{csv_url}')
         WHERE mag >= {mag_slider.value}
         ORDER BY mag DESC
-        LIMIT 1000
+        LIMIT 200
     """
     
-    # 執行 SQL 並轉成 DataFrame
     try:
         df = con.sql(query).df()
         row_count = len(df)
@@ -65,35 +45,37 @@ def Page():
         solara.Error(f"資料讀取失敗: {e}")
         return
 
-    # --- 版面配置：主要內容區 ---
     with solara.Column(style={"padding": "0 20px"}):
-        solara.Markdown(f"### 🔍 查詢結果：共找到 {row_count} 筆資料")
+        solara.Markdown(f"### 查詢結果：顯示前 {row_count} 筆最強地震")
         
-        # 1. 建立地圖物件
-        # center=[緯度, 經度], zoom=縮放層級
+        # 1. 建立地圖
         m = leafmap.Map(center=[20, 0], zoom=2)
         
-        # 2. 如果有資料，進行繪圖
-        if not df.empty:
-            # --- 關鍵修正：使用 GeoPandas ---
-            # 將普通的 DataFrame 轉成 GeoDataFrame
-            # 這一步會把經緯度變成真正的「點 (Point)」幾何圖形
-            gdf = gpd.GeoDataFrame(
-                df, 
-                geometry=gpd.points_from_xy(df.longitude, df.latitude)
-            )
-            
-            # 將 GeoDataFrame 加入地圖
-            # layer_name: 圖層名稱 (會顯示在地圖右上角的圖層控制裡)
-            m.add_gdf(gdf, layer_name="Earthquakes")
+        # --- 測試點：台灣 (確認地圖功能正常) ---
+        # 如果你看到這個藍色圖釘，表示地圖功能是好的
+        test_marker = Marker(location=[23.5, 121], draggable=False, title="台灣測試點")
+        m.add_layer(test_marker)
 
-        # 3. 渲染地圖
-        # 使用 .element() 是 Solara 顯示 Leafmap 的標準方式
+        # --- 核心修改：暴力迴圈法 ---
+        # 不透過 leafmap 的轉換，直接用 Python 迴圈一個一個畫
+        if not df.empty:
+            for index, row in df.iterrows():
+                # 建立一個紅色的圓圈
+                circle = CircleMarker(
+                    location=[row['latitude'], row['longitude']],
+                    radius=5,           # 半徑
+                    color="red",        # 邊框顏色
+                    fill_color="red",   # 填充顏色
+                    fill_opacity=0.6,   # 透明度
+                    weight=1            # 邊框粗細
+                )
+                # 加到地圖上
+                m.add_layer(circle)
+
+        # 顯示地圖
         m.element()
 
-        # 4. 顯示數據表格
-        solara.Markdown("### 📋 詳細資料表")
+        # 顯示表格
         solara.DataFrame(df)
 
-# 啟動應用程式
 Page()
