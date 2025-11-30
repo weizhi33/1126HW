@@ -1,16 +1,13 @@
-FROM quay.io/jupyter/base-notebook:latest
+FROM python:3.9
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+WORKDIR /code
 
-RUN mkdir ./pages
-COPY /pages ./pages
+# 複製 requirements.txt 並安裝
+COPY ./requirements.txt /code/requirements.txt
+RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
-WORKDIR /home/jovyan
-USER jovyan
+# 複製所有檔案 (包含 app.py)
+COPY . .
 
-EXPOSE 7860
-
-HEALTHCHECK CMD curl --fail http://localhost:7860/_stcore/health
-
-ENTRYPOINT ["solara", "run", "./pages", "--host=0.0.0.0", "--port=7860"]
+# 啟動 app.py
+CMD ["solara", "run", "app.py", "--host=0.0.0.0", "--port=7860"]
