@@ -65,16 +65,14 @@ def Page():
         m = leafmap.Map(center=[23.5, 121], zoom=4) 
         
         if not df.empty:
-            m.add_circle_markers_from_xy(
+            # 改用 add_points_from_xy，這是最標準的「插針」
+            m.add_points_from_xy(
                 df, 
                 x="longitude", 
-                y="latitude", 
-                radius=10, 
-                color="red", 
-                fill_color="orange",
-                popup=["place", "mag", "time"] 
+                y="latitude",
+                popup=["place", "mag", "time"]
             )
-        
+            
         # 🔥 關鍵修改：用 .element() 讓 Solara 顯示地圖 🔥
         m.element()
 
