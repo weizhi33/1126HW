@@ -1,7 +1,8 @@
 solara
 duckdb
-leafmap
+leafmap>=0.31.0
 pandas
 geopandas
 pyarrow
 fiona
+ipyleaflet
