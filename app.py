@@ -1,8 +1,7 @@
 import solara
 import duckdb
-import leafmap
+import leafmap.foliumap as leafmap  # <--- 關鍵修改：改用 Folium 引擎 (靜態渲染)
 import pandas as pd
-from ipyleaflet import CircleMarker, Marker  # 引入最底層的繪圖元件
 
 # --- 1. 初始化 DuckDB ---
 con = duckdb.connect(database=':memory:')
@@ -15,27 +14,26 @@ con.load_extension('httpfs')
 csv_url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_month.csv"
 
 # --- 3. 互動變數 ---
-mag_slider = solara.reactive(5.0)  # 為了避免點太多，預設先設 5.0
+mag_slider = solara.reactive(5.0)
 
 @solara.component
 def Page():
     
     with solara.Column(style={"padding": "20px"}):
-        solara.Markdown("# 🌍 地理空間分析儀表板 (暴力繪圖版)")
-        solara.Markdown("使用最底層的 **ipyleaflet** 迴圈繪圖，保證點點現形。")
+        solara.Markdown("# 🌍 地理空間分析儀表板 (Folium iframe 版)")
+        solara.Markdown("使用 **iframe** 強制渲染，解決 Docker 環境下通訊失敗的問題。")
 
     with solara.Sidebar():
         solara.Markdown("### 📊 篩選條件")
         solara.SliderFloat(label="地震規模", value=mag_slider, min=2.5, max=8.0, step=0.1)
 
     # --- SQL 查詢 ---
-    # 限制只抓前 200 筆，避免手動畫圖太慢
     query = f"""
         SELECT place, mag, time, latitude, longitude
         FROM read_csv_auto('{csv_url}')
         WHERE mag >= {mag_slider.value}
         ORDER BY mag DESC
-        LIMIT 200
+        LIMIT 300
     """
     
     try:
@@ -46,34 +44,36 @@ def Page():
         return
 
     with solara.Column(style={"padding": "0 20px"}):
-        solara.Markdown(f"### 查詢結果：顯示前 {row_count} 筆最強地震")
+        solara.Markdown(f"### 查詢結果：顯示前 {row_count} 筆資料")
         
-        # 1. 建立地圖
+        # 1. 建立地圖 (使用 Folium 引擎)
         m = leafmap.Map(center=[20, 0], zoom=2)
         
-        # --- 測試點：台灣 (確認地圖功能正常) ---
-        # 如果你看到這個藍色圖釘，表示地圖功能是好的
-        test_marker = Marker(location=[23.5, 121], draggable=False, title="台灣測試點")
-        m.add_layer(test_marker)
-
-        # --- 核心修改：暴力迴圈法 ---
-        # 不透過 leafmap 的轉換，直接用 Python 迴圈一個一個畫
+        # 2. 加入資料點
         if not df.empty:
-            for index, row in df.iterrows():
-                # 建立一個紅色的圓圈
-                circle = CircleMarker(
-                    location=[row['latitude'], row['longitude']],
-                    radius=5,           # 半徑
-                    color="red",        # 邊框顏色
-                    fill_color="red",   # 填充顏色
-                    fill_opacity=0.6,   # 透明度
-                    weight=1            # 邊框粗細
-                )
-                # 加到地圖上
-                m.add_layer(circle)
-
-        # 顯示地圖
-        m.element()
+            # Folium 引擎的語法跟原本很像，但它是生成靜態 HTML
+            m.add_points_from_xy(
+                df, 
+                x="longitude", 
+                y="latitude",
+                popup=["place", "mag", "time"]
+            )
+        
+        # 3. 🔥 關鍵修改：使用 iframe 顯示 🔥
+        # 我們把地圖轉成一段 HTML 文字，直接塞進 iframe 裡
+        # 這樣就繞過了任何 websocket 通訊問題
+        map_html = m.to_html()
+        
+        # 使用 Solara 的 HTML 元件來渲染 iframe
+        solara.HTML(
+            tag="iframe", 
+            attributes={
+                "srcdoc": map_html,  # 把地圖 HTML 直接塞進去
+                "width": "100%", 
+                "height": "600px", 
+                "style": "border: none;"
+            }
+        )
 
         # 顯示表格
         solara.DataFrame(df)
